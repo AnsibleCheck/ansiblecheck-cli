@@ -1,0 +1,14 @@
+flags: {}
+extra-package-dbs: []
+packages:
+- '.'
+extra-deps:
+- base-compat-0.9.3
+- base-orphans-0.6
+- docker-0.4.0.0
+- http-client-0.4.31.2
+- http-client-tls-0.2.4.1
+- http-conduit-2.1.11
+- primitive-0.6.2.0
+- vector-0.12.0.1
+resolver: lts-8.9
