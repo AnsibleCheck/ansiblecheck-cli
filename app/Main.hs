@@ -43,8 +43,35 @@ opts = info((Options <$> operatingSystem <*> operatingSystemVersion) <**> helper
 main :: IO()
 main = do
   options <- execParser opts
-  putStrLn $ writeOS options
+  print (writeOS $ fromOptions options)
 
 
-writeOS :: Options -> String
-writeOS (Options os osv) = "Operating System: " ++ os ++ " -- Operating System Version: " ++ osv
+writeOS :: OperatingSystem -> String
+writeOS os = "Operating System: " ++ show os
+
+data Ubuntu = Yakkety | Xenial | Trusty | Precise
+  deriving (Eq, Show, Read, Ord)
+
+data EL     = EL7 | EL6
+  deriving (Eq, Show, Read, Ord)
+data OEL    = OEL7 | OEL6
+  deriving (Eq, Show, Read, Ord)
+
+data OperatingSystem = Ubuntu Ubuntu
+                     | EL EL
+                     | OEL OEL
+  deriving (Eq, Show, Read, Ord)
+
+data ServiceManager = SystemD | Init
+  deriving (Eq, Show, Read, Ord)
+
+osServiceManager :: OperatingSystem -> ServiceManager
+osServiceManager (Ubuntu Yakkety) = Init
+osServiceManager (Ubuntu Precise) = Init
+osServiceManager (EL EL6)         = Init
+osServiceManager (OEL OEL6)       = Init
+osServiceManager a                = SystemD
+
+
+fromOptions :: Options -> OperatingSystem
+fromOptions (Options os osv) = read (os ++ " " ++ osv)
