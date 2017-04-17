@@ -8,6 +8,7 @@ import Control.Applicative
 import Data.Text (Text)
 import Data.Semigroup((<>))
 import Options.Applicative
+import Text.Read
 
 import qualified Data.Text              as Text
 import qualified Options.Applicative
@@ -46,8 +47,10 @@ main = do
   print (writeOS $ fromOptions options)
 
 
-writeOS :: OperatingSystem -> String
-writeOS os = "Operating System: " ++ show os
+writeOS :: Maybe OperatingSystem -> String
+writeOS mOS = case mOS of
+  Just os -> "Operating System: " ++ show os
+  Nothing -> "Operating System: Failed to parse"
 
 data Ubuntu = Yakkety | Xenial | Trusty | Precise
   deriving (Eq, Show, Read, Ord)
@@ -73,5 +76,5 @@ osServiceManager (OEL OEL6)       = Init
 osServiceManager a                = SystemD
 
 
-fromOptions :: Options -> OperatingSystem
-fromOptions (Options os osv) = read (os ++ " " ++ osv)
+fromOptions :: Options -> Maybe OperatingSystem
+fromOptions (Options os osv) = readMaybe (os ++ " " ++ osv)
