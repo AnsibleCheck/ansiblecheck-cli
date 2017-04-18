@@ -85,3 +85,4 @@ osServiceManager a = SystemD
 
 fromOptions :: Options -> Maybe OperatingSystem
 fromOptions (Options os osv) = readMaybe (os ++ " " ++ osv)
+
