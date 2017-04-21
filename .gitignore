@@ -1,3 +1,4 @@
+# Haskell
 dist
 dist-*
 cabal-dev
@@ -18,3 +19,9 @@ cabal.sandbox.config
 .stack-work/
 cabal.project.local
 .HTF/
+
+# Intellij
+.idea/
+.ideaHaskellLib/
+*.iml
+cabal.config
