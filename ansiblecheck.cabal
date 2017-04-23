@@ -27,7 +27,8 @@ executable ansiblecheck-exe
                      , ansiblecheck
                      , optparse-applicative >= 0.2.0   && < 0.14
                      , text                               < 1.3
-                    --  , docker               >= 0.4.0   && < 0.5
+                     , process              >= 1.4.3   && < 1.5
+                     , directory            >= 1.3.0   && < 1.4
   default-language:    Haskell2010
 
 test-suite ansiblecheck-test
