@@ -81,7 +81,7 @@ osServiceManager (Ubuntu Yakkety) = Init
 osServiceManager (Ubuntu Precise) = Init
 osServiceManager (EL EL6) = Init
 osServiceManager (OEL OEL6) = Init
-osServiceManager a = SystemD
+osServiceManager _ = SystemD
 
 fromOptions :: Options -> Maybe OperatingSystem
 fromOptions (Options os osv) = readMaybe (os ++ " " ++ osv)
