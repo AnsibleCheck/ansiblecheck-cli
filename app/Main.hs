@@ -40,33 +40,44 @@ opts =
     (fullDesc <> progDesc "Check Ansible Playbook" <>
      header "ansiblecheck - a testing framework for ansible")
 
---main :: IO ()
---main = do
---  options <- execParser opts
---  print (writeOS $ fromOptions options)
-
 main :: IO ()
 main = do
-  fp <- System.Directory.getCurrentDirectory
-  runXenial fp
+  options <- execParser opts
+  fp      <- System.Directory.getCurrentDirectory
+  run fp $ fromOptions options
 
-
-runXenial :: FilePath -> IO()
-runXenial fp = do
-  _ <- pullDocker (Ubuntu Xenial)
-  _ <- runDocker fp (Ubuntu Xenial)
-  _ <- syntaxCheckDocker (Ubuntu Xenial)
-  _ <- testDocker (Ubuntu Xenial)
-  _ <- stopDocker (Ubuntu Xenial)
-  _ <- removeDocker (Ubuntu Xenial)
+run :: FilePath -> Maybe OperatingSystem -> IO()
+run fp (Just os) = do
+  _ <- pullDocker os
+  _ <- runDocker fp os
+  _ <- syntaxCheckDocker os
+  _ <- testDocker os
+  _ <- stopDocker os
+  _ <- removeDocker os
   return ()
+run _ Nothing =
+  putStrLn "Invalid Options Input"
 
 
-writeOS :: Maybe OperatingSystem -> String
-writeOS mOS =
-  case mOS of
-    Just os -> "Operating System: " ++ show os
-    Nothing -> "Operating System: Failed to parse"
+writeOS :: OperatingSystem -> (String, String)
+writeOS (Ubuntu Yakkety)  = ("ubuntu", "yakkety")
+writeOS (Ubuntu Xenial)   = ("ubuntu", "xenial")
+writeOS (Ubuntu Trusty)   = ("ubuntu", "trusty")
+writeOS (Ubuntu Precise)  = ("ubuntu", "precise")
+writeOS (EL EL7)          = ("el", "7")
+writeOS (EL EL6)          = ("el", "6")
+writeOS (OEL OEL7)        = ("oel", "7")
+writeOS (OEL OEL6)        = ("oel", "6")
+
+writeInit :: OperatingSystem -> String
+writeInit (Ubuntu Yakkety)  = "/lib/systemd/systemd"
+writeInit (Ubuntu Xenial)   = "/lib/systemd/systemd"
+writeInit (Ubuntu Trusty)   = "/sbin/init"
+writeInit (Ubuntu Precise)  = "/sbin/init"
+writeInit (EL EL7)          = "/lib/systemd/systemd"
+writeInit (EL EL6)          = "/sbin/init"
+writeInit (OEL OEL7)        = "/lib/systemd/systemd"
+writeInit (OEL OEL6)        = "/sbin/init"
 
 data Ubuntu
   = Yakkety
@@ -98,17 +109,20 @@ data ServiceManager
 
 
 pullDocker :: OperatingSystem -> IO ExitCode
-pullDocker _ =
+pullDocker operatingS =
   System.Process.system (
   "docker"
   ++ " "
   ++ "pull"
   ++ " "
-  ++ "ansiblecheck/ansiblecheck:" ++ "ubuntu" ++ "-" ++ "xenial"
+  ++ "ansiblecheck/ansiblecheck:" ++ os ++ "-" ++ osv
   )
+  where
+    (os, osv) = writeOS operatingS
+
 
 runDocker :: FilePath -> OperatingSystem -> IO ExitCode
-runDocker fp _ =
+runDocker fp operatingS =
   System.Process.system (
   "docker"
   ++ " "
@@ -116,19 +130,22 @@ runDocker fp _ =
   ++ " "
   ++ "--detach"
   ++ " "
-  ++ "--name=" ++ "ansiblecheck-ubuntu-xenial"
+  ++ "--name=" ++ "ansiblecheck-" ++ os ++ "-" ++ osv
   ++ " "
   ++ "--volume=" ++ show fp ++ ":" ++ "/etc/ansible/roles/role_under_test:ro"
   ++ " "
   ++ "--volume=/sys/fs/cgroup:/sys/fs/cgroup:ro"
   ++ " "
-  ++ "ansiblecheck/ansiblecheck:" ++ "ubuntu" ++ "-" ++ "xenial"
+  ++ "ansiblecheck/ansiblecheck:" ++ os ++ "-" ++ osv
   ++ " "
-  ++ "/lib/systemd/systemd"
+  ++ initS
   )
+  where
+      (os, osv) = writeOS operatingS
+      initS     = writeInit operatingS
 
 syntaxCheckDocker :: OperatingSystem -> IO ExitCode
-syntaxCheckDocker _ =
+syntaxCheckDocker operatingS =
   System.Process.system (
   "docker"
   ++ " "
@@ -136,44 +153,52 @@ syntaxCheckDocker _ =
   ++ " "
   ++ "--tty"
   ++ " "
-  ++ "ansiblecheck-ubuntu-xenial"
+  ++ "ansiblecheck-" ++ os ++ "-" ++ osv
   ++ " "
   ++ "env TERM=xterm"
   ++ " "
   ++ "ansible-playbook /etc/ansible/roles/role_under_test/tests/test.yml --syntax-check"
   )
+  where
+      (os, osv) = writeOS operatingS
 
 testDocker :: OperatingSystem -> IO ExitCode
-testDocker _ =
+testDocker operatingS =
   System.Process.system (
   "docker"
   ++ " "
   ++ "exec"
   ++ " "
-  ++ "ansiblecheck-ubuntu-xenial"
+  ++ "ansiblecheck-" ++ os ++ "-" ++ osv
   ++ " "
   ++ "ansible-playbook /etc/ansible/roles/role_under_test/tests/test.yml"
   )
+  where
+      (os, osv) = writeOS operatingS
 
 stopDocker :: OperatingSystem -> IO ExitCode
-stopDocker _ =
+stopDocker operatingS =
   System.Process.system (
   "docker"
    ++ " "
    ++ "stop"
    ++ " "
-   ++ "ansiblecheck-ubuntu-xenial"
+   ++ "ansiblecheck-" ++ os ++ "-" ++ osv
   )
+  where
+      (os, osv) = writeOS operatingS
 
 removeDocker :: OperatingSystem -> IO ExitCode
-removeDocker _ =
+removeDocker operatingS =
   System.Process.system (
   "docker"
   ++ " "
   ++ "rm"
   ++ " "
-  ++ "ansiblecheck-ubuntu-xenial"
+  ++ "ansiblecheck-" ++ os ++ "-" ++ osv
   )
+  where
+      (os, osv) = writeOS operatingS
 
 osServiceManager :: OperatingSystem -> ServiceManager
 osServiceManager (Ubuntu Yakkety) = Init
