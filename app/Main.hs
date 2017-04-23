@@ -99,28 +99,42 @@ data ServiceManager
 
 pullDocker :: OperatingSystem -> IO ExitCode
 pullDocker _ =
-  System.Process.system ("docker pull ansiblecheck/ansiblecheck:" ++ "ubuntu" ++ "-" ++ "xenial")
+  System.Process.system (
+  "docker"
+  ++ " "
+  ++ "pull"
+  ++ " "
+  ++ "ansiblecheck/ansiblecheck:" ++ "ubuntu" ++ "-" ++ "xenial"
+  )
 
 runDocker :: FilePath -> OperatingSystem -> IO ExitCode
 runDocker fp _ =
   System.Process.system (
-  "docker run --detach" ++
-  " " ++
-  "--name=" ++ "ansiblecheck-ubuntu-xenial" ++
-  " " ++
-  "--volume=" ++ show fp ++ ":/etc/ansible/roles/role_under_test:ro" ++
-  " " ++
-  "--volume=/sys/fs/cgroup:/sys/fs/cgroup:ro" ++
-  " " ++
-  "ansiblecheck/ansiblecheck:" ++ "ubuntu" ++ "-" ++ "xenial" ++
-  " " ++
-  "/lib/systemd/systemd"
+  "docker"
+  ++ " "
+  ++ "run"
+  ++ " "
+  ++ "--detach"
+  ++ " "
+  ++ "--name=" ++ "ansiblecheck-ubuntu-xenial"
+  ++ " "
+  ++ "--volume=" ++ show fp ++ ":" ++ "/etc/ansible/roles/role_under_test:ro"
+  ++ " "
+  ++ "--volume=/sys/fs/cgroup:/sys/fs/cgroup:ro"
+  ++ " "
+  ++ "ansiblecheck/ansiblecheck:" ++ "ubuntu" ++ "-" ++ "xenial"
+  ++ " "
+  ++ "/lib/systemd/systemd"
   )
 
 syntaxCheckDocker :: OperatingSystem -> IO ExitCode
 syntaxCheckDocker _ =
   System.Process.system (
-  "docker exec --tty"
+  "docker"
+  ++ " "
+  ++ "exec"
+  ++ " "
+  ++ "--tty"
   ++ " "
   ++ "ansiblecheck-ubuntu-xenial"
   ++ " "
@@ -132,7 +146,9 @@ syntaxCheckDocker _ =
 testDocker :: OperatingSystem -> IO ExitCode
 testDocker _ =
   System.Process.system (
-  "docker exec"
+  "docker"
+  ++ " "
+  ++ "exec"
   ++ " "
   ++ "ansiblecheck-ubuntu-xenial"
   ++ " "
@@ -141,11 +157,23 @@ testDocker _ =
 
 stopDocker :: OperatingSystem -> IO ExitCode
 stopDocker _ =
-  System.Process.system "docker stop ansiblecheck-ubuntu-xenial"
+  System.Process.system (
+  "docker"
+   ++ " "
+   ++ "stop"
+   ++ " "
+   ++ "ansiblecheck-ubuntu-xenial"
+  )
 
 removeDocker :: OperatingSystem -> IO ExitCode
 removeDocker _ =
-  System.Process.system "docker rm ansiblecheck-ubuntu-xenial"
+  System.Process.system (
+  "docker"
+  ++ " "
+  ++ "rm"
+  ++ " "
+  ++ "ansiblecheck-ubuntu-xenial"
+  )
 
 osServiceManager :: OperatingSystem -> ServiceManager
 osServiceManager (Ubuntu Yakkety) = Init
