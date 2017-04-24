@@ -38,7 +38,6 @@ main = do
   fp <- System.Directory.getCurrentDirectory
   tests <- System.Directory.listDirectory $ fp ++ "/tests/"
   run fp tests (osFromOptions options) (depsFromOptions options)
-
   where
     osFromOptions :: Options -> Maybe OperatingSystem
     osFromOptions (Options os osv _) = readMaybe (os ++ " " ++ osv)
@@ -120,7 +119,6 @@ runOS cwd deps os active = do
   (_, Just hout, Just herr, ph) <- createProcess (testDocker os) {std_out = CreatePipe, std_err = CreatePipe}
   idempotenceOut                <- IO.hGetContents hout
   idempotenceErr                <- IO.hGetContents herr
---  when (activeBool (putStrLn idempotenceOut))
   idempotenceExitCode           <- waitForProcess ph
   (_, Just hout, _, _)          <- createProcess (stopDocker os) {std_out = CreatePipe, std_err = CreatePipe}
   (_, Just hout, _, _)          <- createProcess (removeDocker os) {std_out = CreatePipe, std_err = CreatePipe}
@@ -129,20 +127,21 @@ runOS cwd deps os active = do
 
 writeIdempotence :: String -> IO()
 writeIdempotence str = do
-  _ <- if isIdempotent
+  _ <- if roleOutputIsIdempotent str
         then
           setSGR [SetColor Foreground Dull Green]
         else
           setSGR [SetColor Foreground Dull Red]
-  _ <- if isIdempotent
+  _ <- if roleOutputIsIdempotent str
         then
           putStrLn "> Idempotent: True"
         else
           putStrLn "> Idempotent: False"
   _ <- setSGR[Reset]
   return ()
-  where
-    isIdempotent = Text.isInfixOf "changed=0" (Text.pack str) && Text.isInfixOf "failed=0" (Text.pack str)
+
+roleOutputIsIdempotent :: String -> Bool
+roleOutputIsIdempotent str = Text.isInfixOf "changed=0" (Text.pack str) && Text.isInfixOf "failed=0" (Text.pack str)
 
 
 writeOS :: OperatingSystem -> (String, String)
@@ -197,38 +196,14 @@ ioInstallDependenciesDocker :: OperatingSystem -> [String] -> IO (String, String
 ioInstallDependenciesDocker os deps = do
   depT <- traverse (ioInstallDependencyDocker os) deps
   return $ foldl mappend mempty depT
---  where
---    tupleMap (A : Monoid) => (A, A) -> (A, A) -> (A, A)
-
-
-
-ioInstallDependencyDocker :: OperatingSystem -> String -> IO (String, String)
-ioInstallDependencyDocker os str = do
-  (_, Just hout, Just herr, ph) <- createProcess (installDependencyDocker os str) {std_out = CreatePipe, std_err = CreatePipe}
-  phExitCode      <- waitForProcess ph
-  depsOut <- IO.hGetContents hout
-  depsErr <- IO.hGetContents herr
-  return (depsOut, depsErr)
-
-installDependencyDocker :: OperatingSystem -> String -> CreateProcess
-installDependencyDocker operatingS dependency =
-  System.Process.shell
-    (
-     "docker" ++
-     " " ++
-     "exec" ++
-     " " ++
-     "--tty" ++
-     " " ++
-     containerN ++
-     " " ++
-     "env TERM=xterm" ++
-     " " ++
-     "ansible-galaxy install " ++ dependency
-   )
   where
-    containerN = containerName operatingS "tests" "test.yml"
-
+  ioInstallDependencyDocker :: OperatingSystem -> String -> IO (String, String)
+  ioInstallDependencyDocker os str = do
+    (_, Just hout, Just herr, ph) <- createProcess (installDependencyDocker os str) {std_out = CreatePipe, std_err = CreatePipe}
+    phExitCode      <- waitForProcess ph
+    depsOut <- IO.hGetContents hout
+    depsErr <- IO.hGetContents herr
+    return (depsOut, depsErr)
 
 pullDocker :: OperatingSystem -> CreateProcess
 pullDocker operatingS =
@@ -268,6 +243,25 @@ runDocker fp operatingS =
     (os, osv) = writeOS operatingS
     containerN = containerName operatingS "tests" "test.yml"
     initS = writeInit operatingS
+
+installDependencyDocker :: OperatingSystem -> String -> CreateProcess
+installDependencyDocker operatingS dependency =
+  System.Process.shell
+    (
+     "docker" ++
+     " " ++
+     "exec" ++
+     " " ++
+     "--tty" ++
+     " " ++
+     containerN ++
+     " " ++
+     "env TERM=xterm" ++
+     " " ++
+     "ansible-galaxy install " ++ dependency
+   )
+  where
+    containerN = containerName operatingS "tests" "test.yml"
 
 syntaxCheckDocker :: OperatingSystem -> CreateProcess
 syntaxCheckDocker operatingS =
