@@ -27,38 +27,45 @@ data Options = Options
   , optDeps:: [String]
   }
 
-opts :: ParserInfo Options
-opts =
-  info
-    ((Options <$> operatingSystemP <*> operatingSystemVersionP <*> many dependencyP) <**> helper)
-    (fullDesc <> progDesc "Check Ansible Playbook" <>
-     header "ansiblecheck - a testing framework for ansible")
-  where
-    operatingSystemP :: Parser String
-    operatingSystemP =
-      strOption (  short 'o'
-                <> long "os"
-                <> metavar "OPERATING_SYSTEM"
-                <> help "Operating System to Target")
-
-    operatingSystemVersionP :: Parser String
-    operatingSystemVersionP =
-      strOption (  short 's'
-                <> long "osv"
-                <> metavar "OS_VERSION"
-                <> help "Operating System Version to Target")
-    dependencyP :: Parser String
-    dependencyP =
-      strOption (  short 'd'
-                <> long "dep"
-                <> metavar "DEPENDENCY"
-                <> help "Ansible Galaxy Dependency to Add")
-
 main :: IO ()
 main = do
   options <- execParser opts
   fp <- System.Directory.getCurrentDirectory
   run fp (osFromOptions options) (depsFromOptions options)
+
+  where
+    osFromOptions :: Options -> Maybe OperatingSystem
+    osFromOptions (Options os osv _) = readMaybe (os ++ " " ++ osv)
+
+    depsFromOptions :: Options -> [String]
+    depsFromOptions (Options _ _ deps) = deps
+
+    opts :: ParserInfo Options
+    opts =
+      info
+        ((Options <$> operatingSystemP <*> operatingSystemVersionP <*> many dependencyP) <**> helper)
+        (fullDesc <> progDesc "Check Ansible Playbook" <>
+         header "ansiblecheck - a testing framework for ansible")
+      where
+        operatingSystemP :: Parser String
+        operatingSystemP =
+          strOption (  short 'o'
+                    <> long "os"
+                    <> metavar "OPERATING_SYSTEM"
+                    <> help "Operating System to Target")
+
+        operatingSystemVersionP :: Parser String
+        operatingSystemVersionP =
+          strOption (  short 's'
+                    <> long "osv"
+                    <> metavar "OS_VERSION"
+                    <> help "Operating System Version to Target")
+        dependencyP :: Parser String
+        dependencyP =
+          strOption (  short 'd'
+                    <> long "dep"
+                    <> metavar "DEPENDENCY"
+                    <> help "Ansible Galaxy Dependency to Add")
 
 run :: FilePath -> Maybe OperatingSystem -> [String] ->  IO ()
 run fp (Just os) deps  = do
@@ -187,7 +194,7 @@ data ServiceManager
 
 ioInstallDependenciesDocker :: OperatingSystem -> [String] -> IO()
 ioInstallDependenciesDocker os deps = do
-  [_] <- traverse (ioInstallDependencyDocker os) deps
+  _ <- traverse (ioInstallDependencyDocker os) deps
   return ()
 
 ioInstallDependencyDocker :: OperatingSystem -> String -> IO()
@@ -306,8 +313,4 @@ osServiceManager (EL EL6) = Init
 osServiceManager (OEL OEL6) = Init
 osServiceManager _ = SystemD
 
-osFromOptions :: Options -> Maybe OperatingSystem
-osFromOptions (Options os osv _) = readMaybe (os ++ " " ++ osv)
 
-depsFromOptions :: Options -> [String]
-depsFromOptions (Options _ _ deps) = deps
