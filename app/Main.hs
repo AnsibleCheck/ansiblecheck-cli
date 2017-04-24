@@ -3,6 +3,7 @@
 module Main where
 
 import Control.Applicative
+import Control.Monad
 import Data.Semigroup ((<>))
 import Data.Text (Text)
 import Lib
@@ -18,6 +19,10 @@ import qualified Data.Text as Text
 import qualified Options.Applicative
 import qualified System.IO as IO
 
+type Dependencies = [String]
+type Dependency = String
+type ActiveBool = Bool
+
 version :: Text
 version = "0.1.0"
 
@@ -31,13 +36,14 @@ main :: IO ()
 main = do
   options <- execParser opts
   fp <- System.Directory.getCurrentDirectory
-  run fp (osFromOptions options) (depsFromOptions options)
+  tests <- System.Directory.listDirectory $ fp ++ "/tests/"
+  run fp tests (osFromOptions options) (depsFromOptions options)
 
   where
     osFromOptions :: Options -> Maybe OperatingSystem
     osFromOptions (Options os osv _) = readMaybe (os ++ " " ++ osv)
 
-    depsFromOptions :: Options -> [String]
+    depsFromOptions :: Options -> Dependencies
     depsFromOptions (Options _ _ deps) = deps
 
     opts :: ParserInfo Options
@@ -67,63 +73,58 @@ main = do
                     <> metavar "DEPENDENCY"
                     <> help "Ansible Galaxy Dependency to Add")
 
-run :: FilePath -> Maybe OperatingSystem -> [String] ->  IO ()
-run fp (Just os) deps  = do
-  putStrLn "> Current Working Directory:"
-  putStrLn fp
-  (_, Just hout, Just herr, _) <-
-    createProcess (pullDocker os) {std_out = CreatePipe, std_err = CreatePipe}
-  pullOut <- IO.hGetContents hout
-  pullErr <- IO.hGetContents herr
-  putStrLn "> Pull"
-  putStrLn "> StdOut"
-  putStrLn pullOut
-  putStrLn "> StdErr"
-  putStrLn pullErr
-  (_, Just hout, Just herr, _) <-
-    createProcess (runDocker fp os) {std_out = CreatePipe, std_err = CreatePipe}
-  createOut <- IO.hGetContents hout
-  createErr <- IO.hGetContents herr
-  putStrLn "> Create"
-  putStrLn "> StdOut"
-  putStrLn createOut
-  putStrLn "> StdErr"
-  putStrLn createErr
---  Install Dependencies
-  ioInstallDependenciesDocker os deps
-  (_, Just hout, Just herr, _) <-
-    createProcess (syntaxCheckDocker os) {std_out = CreatePipe, std_err = CreatePipe}
-  syntaxOut <- IO.hGetContents hout
-  syntaxErr <- IO.hGetContents herr
-  putStrLn "> Syntax Check"
-  putStrLn "> StdOut"
-  putStrLn syntaxOut
-  putStrLn "> StdErr"
-  putStrLn syntaxErr
-  (_, Just hout, Just herr, _) <-
-    createProcess (testDocker os) {std_out = CreatePipe, std_err = CreatePipe}
-  testOut <- IO.hGetContents hout
-  testErr <- IO.hGetContents herr
-  putStrLn "> Test"
-  putStrLn "> StdOut"
-  putStrLn testOut
-  putStrLn "> StdErr"
-  putStrLn testErr
-  (_, Just hout, Just herr, _) <-
-    createProcess (testDocker os) {std_out = CreatePipe, std_err = CreatePipe}
-  idempotenceOut <- IO.hGetContents hout
-  idempotenceErr <- IO.hGetContents herr
-  putStrLn "> Idempotence"
-  putStrLn "> StdOut"
-  putStrLn idempotenceOut
+run :: FilePath -> [FilePath] -> Maybe OperatingSystem -> Dependencies ->  IO ()
+run fp tests (Just os) deps  = do
+  putStrLn $ "> Current Working Directory:" ++ fp
+  print tests
+  (TestOutput _ _ _ _ _ _ _ _ _ _ idempotenceOut _) <- runOS fp deps os True
   writeIdempotence idempotenceOut
-  putStrLn "> StdErr"
-  putStrLn idempotenceErr
-  (_, Just hout, _, _) <- createProcess (stopDocker os) {std_out = CreatePipe, std_err = CreatePipe}
-  (_, Just hout, _, _) <-
-    createProcess (removeDocker os) {std_out = CreatePipe, std_err = CreatePipe}
   return ()
-run _ Nothing _ = putStrLn "Invalid Options Input"
+run _ _ Nothing _ = putStrLn "Invalid Options Input"
+
+data TestOutput = TestOutput {
+  pullOut           :: String
+  , pullErr         :: String
+  , createOut       :: String
+  , createErr       :: String
+  , syntaxOut       :: String
+  , syntaxErr       :: String
+  , depOut          :: String
+  , depErr          :: String
+  , testOut         :: String
+  , testErr         :: String
+  , idempotenceOut  :: String
+  , idempotenceErr  :: String
+} deriving (Show, Read, Eq, Ord)
+
+runOS :: FilePath -> Dependencies -> OperatingSystem -> Bool -> IO TestOutput
+runOS cwd deps os active = do
+  (_, Just hout, Just herr, ph) <- createProcess (pullDocker os) {std_out = CreatePipe, std_err = CreatePipe}
+  pullOut                       <- IO.hGetContents hout
+  pullErr                       <- IO.hGetContents herr
+  pullExitCode                  <- waitForProcess ph
+  (_, Just hout, Just herr, ph) <- createProcess (runDocker cwd os) {std_out = CreatePipe, std_err = CreatePipe}
+  createExitCode                <- waitForProcess ph
+  createOut                     <- IO.hGetContents hout
+  createErr                     <- IO.hGetContents herr
+  (depsOut, depsErr)            <- ioInstallDependenciesDocker os deps
+  (_, Just hout, Just herr, ph) <- createProcess (syntaxCheckDocker os) {std_out = CreatePipe, std_err = CreatePipe}
+  syntaxExitCode                <- waitForProcess ph
+  syntaxOut                     <- IO.hGetContents hout
+  syntaxErr                     <- IO.hGetContents herr
+  (_, Just hout, Just herr, ph) <- createProcess (testDocker os) {std_out = CreatePipe, std_err = CreatePipe}
+  testOut                       <- IO.hGetContents hout
+  testErr                       <- IO.hGetContents herr
+  when active $ putStrLn testOut
+  testExitCode                  <- waitForProcess ph
+  (_, Just hout, Just herr, ph) <- createProcess (testDocker os) {std_out = CreatePipe, std_err = CreatePipe}
+  idempotenceOut                <- IO.hGetContents hout
+  idempotenceErr                <- IO.hGetContents herr
+--  when (activeBool (putStrLn idempotenceOut))
+  idempotenceExitCode           <- waitForProcess ph
+  (_, Just hout, _, _)          <- createProcess (stopDocker os) {std_out = CreatePipe, std_err = CreatePipe}
+  (_, Just hout, _, _)          <- createProcess (removeDocker os) {std_out = CreatePipe, std_err = CreatePipe}
+  return $ TestOutput pullOut pullErr createOut createErr syntaxOut syntaxErr depsOut depsErr testOut testErr idempotenceOut idempotenceErr
 
 
 writeIdempotence :: String -> IO()
@@ -151,8 +152,8 @@ writeOS (Ubuntu Trusty) = ("ubuntu", "trusty")
 writeOS (Ubuntu Precise) = ("ubuntu", "precise")
 writeOS (EL EL7) = ("el", "7")
 writeOS (EL EL6) = ("el", "6")
-writeOS (OEL OEL7) = ("oel", "7")
-writeOS (OEL OEL6) = ("oel", "6")
+writeOS (OEL OEL7) = ("oraclelinux", "7")
+writeOS (OEL OEL6) = ("oraclelinux", "6")
 
 writeInit :: OperatingSystem -> String
 writeInit (Ubuntu Yakkety) = "/lib/systemd/systemd"
@@ -192,20 +193,22 @@ data ServiceManager
   | Init
   deriving (Eq, Show, Read, Ord)
 
-ioInstallDependenciesDocker :: OperatingSystem -> [String] -> IO()
+ioInstallDependenciesDocker :: OperatingSystem -> [String] -> IO (String, String)
 ioInstallDependenciesDocker os deps = do
-  _ <- traverse (ioInstallDependencyDocker os) deps
-  return ()
+  depT <- traverse (ioInstallDependencyDocker os) deps
+  return $ foldl mappend mempty depT
+--  where
+--    tupleMap (A : Monoid) => (A, A) -> (A, A) -> (A, A)
 
-ioInstallDependencyDocker :: OperatingSystem -> String -> IO()
+
+
+ioInstallDependencyDocker :: OperatingSystem -> String -> IO (String, String)
 ioInstallDependencyDocker os str = do
-  (_, Just hout, Just herr, _) <- createProcess (installDependencyDocker os str) {std_out = CreatePipe, std_err = CreatePipe}
+  (_, Just hout, Just herr, ph) <- createProcess (installDependencyDocker os str) {std_out = CreatePipe, std_err = CreatePipe}
+  phExitCode      <- waitForProcess ph
   depsOut <- IO.hGetContents hout
   depsErr <- IO.hGetContents herr
-  putStrLn ("> Dependency - " ++ str)
-  putStrLn depsOut
-  putStrLn depsErr
-  return ()
+  return (depsOut, depsErr)
 
 installDependencyDocker :: OperatingSystem -> String -> CreateProcess
 installDependencyDocker operatingS dependency =
@@ -229,7 +232,13 @@ installDependencyDocker operatingS dependency =
 
 pullDocker :: OperatingSystem -> CreateProcess
 pullDocker operatingS =
-  System.Process.proc "docker" ["pull", "ansiblecheck/ansiblecheck:" ++ os ++ "-" ++ osv]
+  System.Process.shell (
+    "docker"
+    ++ " "
+    ++ "pull"
+    ++ " "
+    ++ "ansiblecheck/ansiblecheck:" ++ os ++ "-" ++ osv
+  )
   where
     (os, osv) = writeOS operatingS
 
