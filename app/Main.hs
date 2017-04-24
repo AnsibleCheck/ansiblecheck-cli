@@ -24,37 +24,44 @@ version = "0.1.0"
 data Options = Options
   { optOS :: String
   , optOSV :: String
---  , optDeps :: [String]
+  , optDeps:: [String]
   }
-
-operatingSystem :: Parser String
-operatingSystem =
-  strOption (long "os" <> metavar "OPERATING_SYSTEM" <> help "Operating System to Target")
-
-operatingSystemVersion :: Parser String
-operatingSystemVersion =
-  strOption (long "osv" <> metavar "OS_VERSION" <> help "Operating System Version to Target")
-
---dependencies :: Parser [String]
---dependencies =
---  listOption (str >>= parseStringList)
---         ( short 'd' <> long "dependency" <> metavar "DEPENDENCY" <> help "Ansible Galaxy Dependency to Add" )
 
 opts :: ParserInfo Options
 opts =
   info
-    ((Options <$> operatingSystem <*> operatingSystemVersion) <**> helper)
+    ((Options <$> operatingSystemP <*> operatingSystemVersionP <*> many dependencyP) <**> helper)
     (fullDesc <> progDesc "Check Ansible Playbook" <>
      header "ansiblecheck - a testing framework for ansible")
+  where
+    operatingSystemP :: Parser String
+    operatingSystemP =
+      strOption (  short 'o'
+                <> long "os"
+                <> metavar "OPERATING_SYSTEM"
+                <> help "Operating System to Target")
+
+    operatingSystemVersionP :: Parser String
+    operatingSystemVersionP =
+      strOption (  short 's'
+                <> long "osv"
+                <> metavar "OS_VERSION"
+                <> help "Operating System Version to Target")
+    dependencyP :: Parser String
+    dependencyP =
+      strOption (  short 'd'
+                <> long "dep"
+                <> metavar "DEPENDENCY"
+                <> help "Ansible Galaxy Dependency to Add")
 
 main :: IO ()
 main = do
   options <- execParser opts
   fp <- System.Directory.getCurrentDirectory
-  run fp $ fromOptions options
+  run fp (osFromOptions options) (depsFromOptions options)
 
-run :: FilePath -> Maybe OperatingSystem -> IO ()
-run fp (Just os) = do
+run :: FilePath -> Maybe OperatingSystem -> [String] ->  IO ()
+run fp (Just os) deps  = do
   putStrLn "> Current Working Directory:"
   putStrLn fp
   (_, Just hout, Just herr, _) <-
@@ -75,6 +82,8 @@ run fp (Just os) = do
   putStrLn createOut
   putStrLn "> StdErr"
   putStrLn createErr
+--  Install Dependencies
+  ioInstallDependenciesDocker os deps
   (_, Just hout, Just herr, _) <-
     createProcess (syntaxCheckDocker os) {std_out = CreatePipe, std_err = CreatePipe}
   syntaxOut <- IO.hGetContents hout
@@ -88,7 +97,7 @@ run fp (Just os) = do
     createProcess (testDocker os) {std_out = CreatePipe, std_err = CreatePipe}
   testOut <- IO.hGetContents hout
   testErr <- IO.hGetContents herr
-  putStrLn "> Tests"
+  putStrLn "> Test"
   putStrLn "> StdOut"
   putStrLn testOut
   putStrLn "> StdErr"
@@ -107,7 +116,7 @@ run fp (Just os) = do
   (_, Just hout, _, _) <-
     createProcess (removeDocker os) {std_out = CreatePipe, std_err = CreatePipe}
   return ()
-run _ Nothing = putStrLn "Invalid Options Input"
+run _ Nothing _ = putStrLn "Invalid Options Input"
 
 
 writeIdempotence :: String -> IO()
@@ -175,6 +184,21 @@ data ServiceManager
   = SystemD
   | Init
   deriving (Eq, Show, Read, Ord)
+
+ioInstallDependenciesDocker :: OperatingSystem -> [String] -> IO()
+ioInstallDependenciesDocker os deps = do
+  [_] <- traverse (ioInstallDependencyDocker os) deps
+  return ()
+
+ioInstallDependencyDocker :: OperatingSystem -> String -> IO()
+ioInstallDependencyDocker os str = do
+  (_, Just hout, Just herr, _) <- createProcess (installDependencyDocker os str) {std_out = CreatePipe, std_err = CreatePipe}
+  depsOut <- IO.hGetContents hout
+  depsErr <- IO.hGetContents herr
+  putStrLn ("> Dependency - " ++ str)
+  putStrLn depsOut
+  putStrLn depsErr
+  return ()
 
 installDependencyDocker :: OperatingSystem -> String -> CreateProcess
 installDependencyDocker operatingS dependency =
@@ -279,5 +303,8 @@ osServiceManager (EL EL6) = Init
 osServiceManager (OEL OEL6) = Init
 osServiceManager _ = SystemD
 
-fromOptions :: Options -> Maybe OperatingSystem
-fromOptions (Options os osv) = readMaybe (os ++ " " ++ osv)
+osFromOptions :: Options -> Maybe OperatingSystem
+osFromOptions (Options os osv _) = readMaybe (os ++ " " ++ osv)
+
+depsFromOptions :: Options -> [String]
+depsFromOptions (Options _ _ deps) = deps
