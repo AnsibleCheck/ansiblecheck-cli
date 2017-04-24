@@ -244,7 +244,10 @@ runDocker fp operatingS =
      "/etc/ansible/roles/role_under_test:ro" ++
      " " ++
      "--volume=/sys/fs/cgroup:/sys/fs/cgroup:ro" ++
-     " " ++ "ansiblecheck/ansiblecheck:" ++ os ++ "-" ++ osv ++ " " ++ initS)
+     " " ++
+     "--privileged" ++
+     " " ++
+     "ansiblecheck/ansiblecheck:" ++ os ++ "-" ++ osv ++ " " ++ initS)
   where
     (os, osv) = writeOS operatingS
     containerN = containerName operatingS "tests" "test.yml"
