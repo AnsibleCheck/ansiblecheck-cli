@@ -100,9 +100,9 @@ run fp (Just os) = do
   putStrLn "> Idempotence"
   putStrLn "> StdOut"
   putStrLn idempotenceOut
+  writeIdempotence idempotenceOut
   putStrLn "> StdErr"
   putStrLn idempotenceErr
-  writeIdempotence idempotenceOut
   (_, Just hout, _, _) <- createProcess (stopDocker os) {std_out = CreatePipe, std_err = CreatePipe}
   (_, Just hout, _, _) <-
     createProcess (removeDocker os) {std_out = CreatePipe, std_err = CreatePipe}
@@ -114,9 +114,9 @@ writeIdempotence :: String -> IO()
 writeIdempotence str = do
   _ <- if isIdempotent
         then
-          setSGR [SetColor Foreground Vivid Green]
+          setSGR [SetColor Foreground Dull Green]
         else
-          setSGR [SetColor Foreground Vivid Red]
+          setSGR [SetColor Foreground Dull Red]
   _ <- if isIdempotent
         then
           putStrLn "> Idempotent: True"
